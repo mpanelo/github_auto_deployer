@@ -28,10 +28,11 @@ def github_auto_deployer(request):
 
 
 def validate(request):
-    signature = hmac.new(config.githubSecretToken, request.data, hashlib.sha1).hexdigest()
-    if not hmac.compare_digest(signature, request.headers['X-Hub-Signature'].split('=')[1]):
+    signature = hmac.new(config['githubSecretToken'].encode(), request.data, hashlib.sha1).hexdigest()
+    _, request_signature = request.headers.get('X-Hub-Signature', 'sha1=').split('=')
+
+    if not hmac.compare_digest(signature, request_signature):
         abort(403)
-        raise Exception("Unauthorized access")
 
 
 def download(repository):
