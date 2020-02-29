@@ -1,5 +1,6 @@
 from flask import abort
-from googleapiclient.discovery import build
+from googleapiclient import discovery
+from googleapiclient import errors
 from google.cloud import storage
 import hmac
 import hashlib
@@ -13,18 +14,17 @@ import string
 with open('config.json') as config_file:
     config = json.load(config_file)
 
-# PROJECT_ID = os.environ['GCLOUD_PROJECT_ID']
 storage_client = storage.Client()
 bucket = storage_client.get_bucket(config['stageBucket'])
 
 
 def github_auto_deployer(request):
     validate(request)
-
     repository = request.get_json()['repository']
     local_repository = download(repository)
     archive = create_archive(local_repository)
-    upload(archive)
+    source_archive_url = upload(archive)
+    deploy_function('test', source_archive_url)
 
 
 def validate(request):
@@ -51,20 +51,52 @@ def create_archive(local_repository):
 
 
 def upload(archive):
-    blob_name = os.path.join('function/src', os.path.basename(archive))
+    blob_name = os.path.basename(archive)
     blob = bucket.blob(blob_name)
     blob.upload_from_filename(archive)
-    print(f"Uploaded {archive} to gs://{bucket.name}/{blob_name}")
     os.remove(archive)
-    return archive
+    source_archive_url = f"gs://{bucket.name}/{blob_name}"
+    print(f"Uploaded {archive} to {source_archive_url}")
+    return source_archive_url
 
 
-if __name__ == '__main__':
-    test_payload = {
-        'repository': {
-            "name": "GCloudFunctionTest",
-            "full_name": "mpanelo/GCloudFunctionTest",
-            "clone_url": "https://github.com/mpanelo/GCloudFunctionTest.git",
-        }
+def deploy_function(name, source_archive_url):
+    location = f"projects/{config['projectId']}/locations/{config['location']}"
+    request_body = {
+        'sourceArchiveUrl': source_archive_url,
+        'name': f"{location}/functions/{name}",
+        'runtime': 'python37',
+        'httpsTrigger': {},
     }
-    github_auto_deployer(test_payload)
+    operation = create_or_update_function(location, request_body)
+    print(operation)
+
+
+def create_or_update_function(location, body):
+    client = CloudFunctionClient()
+    try:
+        return client.create(location, body)
+    except errors.HttpError as error:
+        if error.resp.status == 409 and error.resp.reason == 'Conflict':
+            return client.patch(body)
+        raise error
+
+
+class CloudFunctionClient:
+
+    def __init__(self):
+        self.service = discovery.build('cloudfunctions', 'v1')
+
+    def create(self, location, body):
+        return self.service.projects() \
+            .locations() \
+            .functions() \
+            .create(location=location, body=body) \
+            .execute()
+
+    def patch(self, body):
+        return self.service.projects() \
+            .locations() \
+            .functions() \
+            .patch(name=body['name'], body=body) \
+            .execute()
