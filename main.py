@@ -10,6 +10,7 @@ import os
 import random
 import shutil
 import string
+import time
 
 with open('config.json') as config_file:
     config = json.load(config_file)
@@ -62,24 +63,15 @@ def upload(archive):
 
 def deploy_function(name, source_archive_url):
     location = f"projects/{config['projectId']}/locations/{config['location']}"
-    request_body = {
+    body = {
         'sourceArchiveUrl': source_archive_url,
         'name': f"{location}/functions/{name}",
         'runtime': 'python37',
         'httpsTrigger': {},
     }
-    operation = create_or_update_function(location, request_body)
-    print(operation)
-
-
-def create_or_update_function(location, body):
     client = CloudFunctionClient()
-    try:
-        return client.create(location, body)
-    except errors.HttpError as error:
-        if error.resp.status == 409 and error.resp.reason == 'Conflict':
-            return client.patch(body)
-        raise error
+    operation = client.create_or_update(location, body)
+    return client.poll(operation)
 
 
 class CloudFunctionClient:
@@ -87,7 +79,16 @@ class CloudFunctionClient:
     def __init__(self):
         self.service = discovery.build('cloudfunctions', 'v1')
 
+    def create_or_update(self, location, body):
+        try:
+            return self.create(location, body)
+        except errors.HttpError as error:
+            if error.resp.status == 409 and error.resp.reason == 'Conflict':
+                return self.patch(body)
+            raise error
+
     def create(self, location, body):
+        print(f"Creating function {body['name']} in {location}")
         return self.service.projects() \
             .locations() \
             .functions() \
@@ -95,8 +96,24 @@ class CloudFunctionClient:
             .execute()
 
     def patch(self, body):
+        print(f"Patching function {body['name']}")
         return self.service.projects() \
             .locations() \
             .functions() \
             .patch(name=body['name'], body=body) \
             .execute()
+
+    def poll(self, operation):
+        print('Waiting for operation to finish...')
+        while True:
+            response = self.service.operations() \
+                .get(name=operation['name']) \
+                .execute()
+
+            if response.get('done', False):
+                if 'error' in response:
+                    raise Exception(response['error']['message'])
+                print('Operation complete!')
+                return response['response']
+
+            time.sleep(1)
