@@ -1,4 +1,5 @@
 from flask import abort
+from flask import jsonify
 from googleapiclient import discovery
 from googleapiclient import errors
 from google.cloud import storage
@@ -15,8 +16,11 @@ import time
 with open('config.json') as config_file:
     config = json.load(config_file)
 
+AUTO_DEPLOYER = config['autoDeployer']
+DEPLOYMENTS = config['deployments']
+
 storage_client = storage.Client()
-bucket = storage_client.get_bucket(config['stageBucket'])
+bucket = storage_client.get_bucket(AUTO_DEPLOYER['stagingBucket'])
 
 
 def github_auto_deployer(request):
@@ -25,11 +29,13 @@ def github_auto_deployer(request):
     local_repository = download(repository)
     archive = create_archive(local_repository)
     source_archive_url = upload(archive)
-    deploy_function('test', source_archive_url)
+    function_config = get_function_config(repository, source_archive_url)
+    result = deploy_function(function_config)
+    return jsonify(result)
 
 
 def validate(request):
-    signature = hmac.new(config['githubSecretToken'].encode(), request.data, hashlib.sha1).hexdigest()
+    signature = hmac.new(AUTO_DEPLOYER['githubSecretToken'].encode(), request.data, hashlib.sha1).hexdigest()
     _, request_signature = request.headers.get('X-Hub-Signature', 'sha1=').split('=')
 
     if not hmac.compare_digest(signature, request_signature):
@@ -61,12 +67,22 @@ def upload(archive):
     return source_archive_url
 
 
-def deploy_function(name, source_archive_url):
-    location = f"projects/{config['projectId']}/locations/{config['location']}"
+def get_function_config(repository, source_archive_url):
+    for deployment in DEPLOYMENTS:
+        if deployment['repositoryName'] == repository['name']:
+            function_config = deployment['cloudFunction']
+            function_config['source'] = source_archive_url
+            return function_config
+
+    raise Exception(f"GitHub repository {repository['name']} does not have deployment configuration")
+
+
+def deploy_function(function_config):
+    location = f"projects/{AUTO_DEPLOYER['projectId']}/locations/{function_config['location']}"
     body = {
-        'sourceArchiveUrl': source_archive_url,
-        'name': f"{location}/functions/{name}",
-        'runtime': 'python37',
+        'sourceArchiveUrl': function_config['source'],
+        'name': f"{location}/functions/{function_config['name']}",
+        'runtime': function_config['runtime'],
         'httpsTrigger': {},
     }
     client = CloudFunctionClient()
