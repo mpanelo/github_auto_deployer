@@ -1,10 +1,3 @@
----
-tags: [Import-3930]
-title: githubautodeployer
-created: '2020-02-29T06:41:16.891Z'
-modified: '2020-03-01T05:01:14.991Z'
----
-
 # github_auto_deployer
 Automatically deploy [HTTP Cloud Functions](https://cloud.google.com/functions/docs/writing/http) using [GitHub Webhooks](https://developer.github.com/webhooks/) and the HTTP Cloud Function `github_auto_deployer`. This tool is a Python port of the NodeJs community tutorial [Cloud Functions GitHub Auto-deployer](https://cloud.google.com/community/tutorials/cloud-functions-github-auto-deployer). View the original [source code](https://github.com/GoogleCloudPlatform/community/blob/master/tutorials/cloud-functions-github-auto-deployer/auto-deployer/index.js).
 
