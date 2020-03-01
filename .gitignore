@@ -1,4 +1,5 @@
 .idea
 .credentials
 .gcloudignore
+config.json
 venv
