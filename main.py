@@ -83,6 +83,7 @@ def deploy_function(function_config):
         'sourceArchiveUrl': function_config['source'],
         'name': f"{location}/functions/{function_config['name']}",
         'runtime': function_config['runtime'],
+        'environmentVariables': function_config['environmentVariables'],
         'httpsTrigger': {},
     }
     client = CloudFunctionClient()
