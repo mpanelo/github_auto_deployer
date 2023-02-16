@@ -29,4 +29,4 @@ six==1.14.0
 smmap==3.0.1
 uritemplate==3.0.1
 urllib3==1.26.5
-Werkzeug==1.0.0
+Werkzeug==2.2.3
